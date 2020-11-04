@@ -1,0 +1,195 @@
+package com.dxc.art.util;
+
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+
+import javax.naming.CommunicationException;
+import javax.naming.Context;
+import javax.naming.NamingEnumeration;
+import javax.naming.NamingException;
+import javax.naming.directory.Attribute;
+import javax.naming.directory.Attributes;
+import javax.naming.directory.DirContext;
+import javax.naming.directory.InitialDirContext;
+import javax.naming.directory.SearchControls;
+import javax.naming.directory.SearchResult;
+import javax.naming.ldap.InitialLdapContext;
+import javax.naming.ldap.LdapContext;
+
+import com.dxc.art.domain.LoggedinUser;
+
+public class GetUserDetailsFromLDAP {
+ 
+	
+
+	private static String prefixUserIDcheck = "uid=";
+	private static String basePrefix = "ou=employees,o=bpo";
+	private static String factory = "com.sun.jndi.ldap.LdapCtxFactory";
+	private static String url = "ldap://xx.xxx.xxx.x.xx";
+	private static String artGroup = "ou=ART,ou=groups,o=bpo";
+	private boolean isSupervisor = false;
+	private boolean isAdmin = false;
+
+
+	public void ldapAuthentication(String name, String password) {
+		
+		DirContext ctx = null;
+		ctx = createContext(name, password);
+		boolean flag = false;
+
+		if (ctx == null) {
+			System.out.println("Invalid credentials.");
+		} else {
+			System.out.println("Credential validated.");
+			flag = true;
+		}
+		
+		String groupValART = getGroups(name, "", "cn", "*", ctx, artGroup);
+		if (groupValART.isEmpty()) {
+			//loggedInUser.setMsg("User not present in ART group");
+			flag = false;
+		} else {
+			//loggedInUser.setMsg("Group is " + groupValART);
+			if(groupValART.equals("Admin")) {
+				isAdmin = true ;
+				flag = true ;
+			}
+			if(groupValART.equals("Supervisor")) {
+				isSupervisor = true ;
+				flag = true ;
+			}
+		}
+		
+	}
+
+	private DirContext createContext(String uid, String pwd) {
+		DirContext ctx = null;
+		
+		System.out.println("uid: " + uid);
+		System.out.println("pwd: " + pwd);
+		System.out.println("url: " + url);
+		System.out.println("prefixUserIDcheck: " + prefixUserIDcheck);
+		System.out.println("basePrefix: " + basePrefix);
+		System.out.println("SECURITY_PRINCIPAL: " + prefixUserIDcheck + uid + "," + basePrefix);
+		System.out.println("factory: " + factory);
+		try {
+			Hashtable table = new Hashtable();
+			table.put(Context.PROVIDER_URL, url);
+			if (uid != null) {
+				table.put(Context.SECURITY_PRINCIPAL, prefixUserIDcheck+ uid + "," + basePrefix);
+
+				table.put(Context.SECURITY_CREDENTIALS, pwd);
+				table.put(Context.INITIAL_CONTEXT_FACTORY,factory);
+			}
+			ctx = new InitialDirContext(table);
+			LdapContext ctxa = new InitialLdapContext(table, null);
+			
+			String[] attributes = { "mail","sn","givenName","uid" };
+			
+		
+			
+			SearchControls searchCtrls = new SearchControls();
+			searchCtrls.setReturningAttributes(attributes);
+			searchCtrls.setSearchScope(SearchControls.SUBTREE_SCOPE);
+			String filter = "(objectClass=*)";
+			NamingEnumeration values = ctx.search("\"" + prefixUserIDcheck + uid + "," + basePrefix + "\"",filter,searchCtrls);
+			while (values.hasMoreElements())
+			{
+				SearchResult result = (SearchResult) values.next();
+				Attributes attribs = result.getAttributes();
+
+				if (null != attribs)
+				{
+					for (NamingEnumeration ae = attribs.getAll(); ae.hasMoreElements();)
+					{
+						Attribute atr = (Attribute) ae.next();
+						String attributeID = atr.getID();
+						
+						for (Enumeration vals = atr.getAll(); vals.hasMoreElements(); 
+							System.out.println(attributeID +": "+ vals.nextElement()));
+					}
+				}
+			}
+		} catch (CommunicationException cex) {
+			System.out.println("cex.getMessage()==" + cex.getMessage());
+		} catch (NamingException nex) {
+			System.out.println("nex.getMessage()==" + nex.getMessage());
+		}
+
+		return ctx;
+	}
+	
+	public String getGroups(String uid, String pwd, String cn, String objectClass, DirContext ctx, String roleGroup) {
+		String grpName = "";
+
+		try {
+			if (cn == null) {
+				return "";
+			}
+
+//			String userDN = uid;
+//			String userDNl = userDN.toLowerCase();
+//			String userDNu = userDN.toUpperCase();
+
+//			if (!userDN.startsWith(prefixUserIDcheck)) {
+//				userDN = prefixUserIDcheck + userDN + "," + basePrefix;
+//				userDNl = prefixUserIDcheck + userDNl + "," + basePrefix;
+//				userDNu = prefixUserIDcheck + userDNu + "," + basePrefix;
+//			}
+			    SearchControls searchControls = new SearchControls();
+			    searchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);
+			    searchControls.setTimeLimit(30000);
+			    NamingEnumeration<?> namingEnum = ctx.search("ou=employees,o=bpo", "(objectclass=user)", searchControls);
+			    while (namingEnum.hasMore ()) {
+			        SearchResult result = (SearchResult) namingEnum.next ();    
+			        Attributes attrs = result.getAttributes ();
+			        System.out.println(attrs.get("cn"));
+			    }
+			    } catch (Exception ex) {
+			System.out.println(" Error in Authentication 1 ");
+			ex.printStackTrace();
+		} finally {
+			// ctx = releaseContext(ctx);
+		}
+		if (grpName == "")
+			return "";
+		grpName = grpName.substring(0, grpName.length() - 1);
+		return "";
+	}
+	private static String getFilter(Map filterMap) {
+		if (filterMap != null) {
+			StringBuffer buf = new StringBuffer("(&(");
+			Set ks = filterMap.keySet();
+			Iterator itr = ks.iterator();
+			boolean first = true;
+			while (itr.hasNext()) {
+				String key = (String) itr.next();
+				String value = (String) filterMap.get(key);
+				if (value != null) {
+					if (!first) {
+						buf.append("(");
+					}
+					buf.append(key);
+					buf.append("=");
+					buf.append(value);
+					buf.append(')');
+					first = false;
+				}
+			}
+			buf.append(")");
+
+			return buf.toString();
+		}
+		return null;
+	}
+	
+ public static void main(String args[]) throws Exception{
+  GetUserDetailsFromLDAP gug = new GetUserDetailsFromLDAP();
+  gug.ldapAuthentication("XXXXX","xxxx");
+ }
+}
